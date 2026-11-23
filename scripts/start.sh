@@ -35,9 +35,10 @@ if [ ! -f "$SCRIPT_DIR/.env" ]; then
 fi
 
 export $(grep -v '^#' "$SCRIPT_DIR/.env" | xargs) 2>/dev/null || true
+export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
 
 echo "Iniciando backend..."
-nohup "$BACKEND_EXE" --urls "${ASPNETCORE_URLS:-http://0.0.0.0:5000}" >> "$LOG_FILE" 2>&1 &
+DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 nohup "$BACKEND_EXE" --urls "${ASPNETCORE_URLS:-http://0.0.0.0:5000}" >> "$LOG_FILE" 2>&1 &
 BACKEND_PID=$!
 
 echo $BACKEND_PID > "$PID_FILE"

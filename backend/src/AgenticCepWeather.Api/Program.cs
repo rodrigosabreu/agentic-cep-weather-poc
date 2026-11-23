@@ -101,6 +101,14 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors();
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler("/error");
+}
 app.UseHttpsRedirection();
 
 // API endpoints first
@@ -127,8 +135,10 @@ app.MapPost("/api/chat", async (ChatRequest request, IChatOrchestrator orchestra
     {
         return Results.Problem(ex.Message, statusCode: 500, title: ex.ErrorCode);
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        var logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("ChatEndpoint");
+        logger.LogError(ex, "Erro no endpoint /api/chat");
         return Results.Problem("Erro interno do servidor", statusCode: 500);
     }
 });
