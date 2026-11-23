@@ -14,10 +14,10 @@ mkdir -p "$PUBLISH_DIR"
 
 echo ">> Restaurando dependências do backend..."
 cd "$BACKEND_DIR"
-dotnet restore AgenticCepWeather.slnx
+dotnet restore AgenticCepWeather.sln
 
 echo ">> Compilando backend..."
-dotnet build AgenticCepWeather.slnx -c Release --no-restore
+dotnet build AgenticCepWeather.sln -c Release --no-restore
 
 echo ">> Publicando backend (self-contained linux-x64)..."
 dotnet publish src/AgenticCepWeather.Api/AgenticCepWeather.Api.csproj \

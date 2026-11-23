@@ -60,17 +60,17 @@ public class OpenMeteoService : IWeatherService
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             _logger.LogError("Timeout ao geocodificar {Cidade}/{Uf}", cidade, uf);
-            throw new DomainExceptions.TimeoutException("Open-Meteo Geocoding", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+            throw new TimeoutException("Open-Meteo Geocoding", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao geocodificar {Cidade}/{Uf}", cidade, uf);
-            throw new DomainExceptions.ExternalApiException("Open-Meteo Geocoding", "Erro de conexão com a API", null, ex);
+            throw new ExternalApiException("Open-Meteo Geocoding", "Erro de conexão com a API", null, ex);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Erro ao deserializar resposta do Open-Meteo Geocoding para {Cidade}/{Uf}", cidade, uf);
-            throw new DomainExceptions.ExternalApiException("Open-Meteo Geocoding", "Resposta inválida da API", null, ex);
+            throw new ExternalApiException("Open-Meteo Geocoding", "Resposta inválida da API", null, ex);
         }
     }
 
@@ -131,17 +131,17 @@ public class OpenMeteoService : IWeatherService
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             _logger.LogError("Timeout ao obter previsão do tempo para lat={Lat}, lon={Lon}", latitude, longitude);
-            throw new DomainExceptions.TimeoutException("Open-Meteo Forecast", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+            throw new TimeoutException("Open-Meteo Forecast", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao obter previsão do tempo para lat={Lat}, lon={Lon}", latitude, longitude);
-            throw new DomainExceptions.ExternalApiException("Open-Meteo Forecast", "Erro de conexão com a API", null, ex);
+            throw new ExternalApiException("Open-Meteo Forecast", "Erro de conexão com a API", null, ex);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Erro ao deserializar resposta do Open-Meteo Forecast para lat={Lat}, lon={Lon}", latitude, longitude);
-            throw new DomainExceptions.ExternalApiException("Open-Meteo Forecast", "Resposta inválida da API", null, ex);
+            throw new ExternalApiException("Open-Meteo Forecast", "Resposta inválida da API", null, ex);
         }
     }
 

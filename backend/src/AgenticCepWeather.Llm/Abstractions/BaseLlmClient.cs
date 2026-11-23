@@ -2,7 +2,9 @@ namespace AgenticCepWeather.Llm.Abstractions;
 
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 public abstract class BaseLlmClient : ILlmClient
 {
@@ -76,12 +78,11 @@ public abstract class BaseLlmClient : ILlmClient
                     ["type"] = t.Parameters.Type,
                     ["properties"] = t.Parameters.Properties?.ToDictionary(
                         p => p.Key,
-                        p => new Dictionary<string, object>
+                        p => (object)new Dictionary<string, object>
                         {
                             ["type"] = p.Value.Type,
                             ["description"] = p.Value.Description ?? string.Empty
-                        })
-                        ?? new Dictionary<string, object>(),
+                        }) ?? new Dictionary<string, object>(),
                     ["required"] = t.Parameters.Required ?? new List<string>()
                 }
             }

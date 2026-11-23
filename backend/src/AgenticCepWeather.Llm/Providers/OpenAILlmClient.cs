@@ -59,7 +59,7 @@ public class OpenAILlmClient : BaseLlmClient
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("OpenAI API erro {StatusCode}: {Content}", response.StatusCode, responseContent);
-                throw new DomainExceptions.LlmProviderException("OpenAI", $"API retornou {response.StatusCode}: {responseContent}");
+                throw new LlmProviderException("OpenAI", $"API retornou {response.StatusCode}: {responseContent}");
             }
 
             return ParseResponse(responseContent);
@@ -67,12 +67,12 @@ public class OpenAILlmClient : BaseLlmClient
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao chamar OpenAI API");
-            throw new DomainExceptions.LlmProviderException("OpenAI", "Erro de conexão com a API", ex);
+            throw new LlmProviderException("OpenAI", "Erro de conexão com a API", ex);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Erro ao deserializar resposta da OpenAI API");
-            throw new DomainExceptions.LlmProviderException("OpenAI", "Resposta inválida da API", ex);
+            throw new LlmProviderException("OpenAI", "Resposta inválida da API", ex);
         }
     }
 
@@ -103,7 +103,7 @@ public class OpenAILlmClient : BaseLlmClient
         {
             var errorContent = await response.Content.ReadAsStringAsync(ct);
             _logger.LogError("OpenAI API streaming erro {StatusCode}: {Content}", response.StatusCode, errorContent);
-            throw new DomainExceptions.LlmProviderException("OpenAI", $"API retornou {response.StatusCode}: {errorContent}");
+            throw new LlmProviderException("OpenAI", $"API retornou {response.StatusCode}: {errorContent}");
         }
 
         var stream = await response.Content.ReadAsStreamAsync(ct);
@@ -156,9 +156,12 @@ public class OpenAILlmClient : BaseLlmClient
         var accumulatedContent = new System.Text.StringBuilder();
         var accumulatedToolCalls = new Dictionary<int, ToolCallBuilder>();
 
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        while (true)
         {
             var line = await reader.ReadLineAsync(ct);
+            if (line == null || ct.IsCancellationRequested)
+                break;
+
             if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data: "))
                 continue;
 
@@ -166,18 +169,30 @@ public class OpenAILlmClient : BaseLlmClient
             if (data == "[DONE]")
                 break;
 
+            bool parseSuccess = false;
+            JsonDocument? doc = null;
+            JsonElement root = default;
+            JsonElement choice = default;
+            JsonElement delta = default;
+            string? contentDelta = null;
+            bool isComplete = false;
+            LlmUsage? usage = null;
+            List<ToolCall> toolCalls = [];
+
             try
             {
-                using var doc = JsonDocument.Parse(data);
-                var root = doc.RootElement;
+                doc = JsonDocument.Parse(data);
+                root = doc.RootElement;
 
                 if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                {
+                    doc.Dispose();
                     continue;
+                }
 
-                var choice = choices[0];
-                var delta = choice.GetProperty("delta");
+                choice = choices[0];
+                delta = choice.GetProperty("delta");
 
-                string? contentDelta = null;
                 if (delta.TryGetProperty("content", out var contentProp) && contentProp.ValueKind != JsonValueKind.Null)
                 {
                     contentDelta = contentProp.GetString();
@@ -212,43 +227,64 @@ public class OpenAILlmClient : BaseLlmClient
                     }
                 }
 
-                var isComplete = choice.TryGetProperty("finish_reason", out var finishReason) &&
-                                 finishReason.ValueKind != JsonValueKind.Null &&
-                                 finishReason.GetString() != null;
+                isComplete = choice.TryGetProperty("finish_reason", out var finishReason) &&
+                             finishReason.ValueKind != JsonValueKind.Null &&
+                             finishReason.GetString() != null;
 
                 if (isComplete)
                 {
-                    var toolCalls = accumulatedToolCalls.Values
+                    toolCalls = accumulatedToolCalls.Values
                         .Where(b => !string.IsNullOrEmpty(b.Name))
                         .Select(b => new ToolCall(b.Id, b.Name, b.Arguments))
                         .ToList();
 
-                    var usage = root.TryGetProperty("usage", out var usageProp) ? new LlmUsage(
-                        usageProp.GetProperty("prompt_tokens").GetInt32(),
-                        usageProp.GetProperty("completion_tokens").GetInt32(),
-                        usageProp.GetProperty("total_tokens").GetInt32()
-                    ) : null;
+                    if (root.TryGetProperty("usage", out var usageProp))
+                    {
+                        usage = new LlmUsage(
+                            usageProp.GetProperty("prompt_tokens").GetInt32(),
+                            usageProp.GetProperty("completion_tokens").GetInt32(),
+                            usageProp.GetProperty("total_tokens").GetInt32()
+                        );
+                    }
 
-                    yield return new LlmStreamChunk(
-                        null,
-                        toolCalls,
-                        true,
-                        usage
-                    );
-                    yield break;
+                    parseSuccess = true;
                 }
-
-                if (!string.IsNullOrEmpty(contentDelta))
+                else
                 {
-                    yield return new LlmStreamChunk(contentDelta, null, false);
+                    parseSuccess = true;
                 }
             }
             catch (JsonException)
             {
                 // Ignora linhas malformadas no stream
+                parseSuccess = false;
+            }
+            finally
+            {
+                doc?.Dispose();
+            }
+
+            if (!parseSuccess)
+                continue;
+
+            if (isComplete)
+            {
+                yield return new LlmStreamChunk(
+                    null,
+                    toolCalls,
+                    true,
+                    usage
+                );
+                yield break;
+            }
+
+            if (!string.IsNullOrEmpty(contentDelta))
+            {
+                yield return new LlmStreamChunk(contentDelta, null, false);
             }
         }
 
+        // Se o stream terminou sem finish_reason, retorna o que acumulamos
         var finalToolCalls = accumulatedToolCalls.Values
             .Where(b => !string.IsNullOrEmpty(b.Name))
             .Select(b => new ToolCall(b.Id, b.Name, b.Arguments))

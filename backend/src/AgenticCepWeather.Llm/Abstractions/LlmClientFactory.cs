@@ -1,8 +1,9 @@
 namespace AgenticCepWeather.Llm.Abstractions;
 
 using AgenticCepWeather.Domain.Interfaces;
-using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Configuration;
+using AgenticCepWeather.Llm.Providers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 

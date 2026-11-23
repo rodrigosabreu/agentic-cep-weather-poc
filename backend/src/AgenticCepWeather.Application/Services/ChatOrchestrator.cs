@@ -3,9 +3,12 @@ namespace AgenticCepWeather.Application.Services;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
+using AgenticCepWeather.Llm.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using AgenticCepWeather.Domain.Configuration;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 public class ChatOrchestrator : IChatOrchestrator
 {
@@ -66,7 +69,7 @@ public class ChatOrchestrator : IChatOrchestrator
                 ct
             );
         }
-        catch (Exception ex) when (ex is not DomainExceptions.AgenticCepWeatherException)
+        catch (Exception ex) when (ex is not AgenticCepWeatherException)
         {
             _logger.LogWarning(ex, "Provedor primário {Provider} falhou, tentando fallback", _llmSettings.Provider);
             attemptedExceptions.Add(ex);
@@ -88,7 +91,7 @@ public class ChatOrchestrator : IChatOrchestrator
             {
                 attemptedExceptions.Add(fallbackEx);
                 _logger.LogError(fallbackEx, "Fallback para {Provider} também falhou", fallbackProvider);
-                throw new DomainExceptions.LlmFallbackException(attemptedExceptions);
+                throw new LlmFallbackException(attemptedExceptions);
             }
         }
 
@@ -179,7 +182,7 @@ public class ChatOrchestrator : IChatOrchestrator
         );
     }
 
-    public async Task<IAsyncEnumerable<ChatStreamChunk>> ProcessMessageStreamAsync(string sessionId, string userMessage, CancellationToken ct = default)
+    public async IAsyncEnumerable<ChatStreamChunk> ProcessMessageStreamAsync(string sessionId, string userMessage, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
     {
         var session = await _sessionStore.GetAsync(sessionId, ct)
             ?? await _sessionStore.CreateAsync(sessionId, ct);
@@ -204,12 +207,12 @@ public class ChatOrchestrator : IChatOrchestrator
             yield break;
         }
 
-        var stream = llmClient.StreamAsync(request, ct);
+        var streamTask = llmClient.StreamAsync(request, ct);
+        var stream = await streamTask;
         var accumulatedContent = new System.Text.StringBuilder();
         var accumulatedToolCalls = new List<ToolCall>();
-        var isComplete = false;
 
-        await foreach (var chunk in stream.WithCancellation(ct))
+        await foreach (var chunk in stream.WithCancellation<LlmStreamChunk>(ct))
         {
             if (chunk.ContentDelta != null)
             {
@@ -223,7 +226,6 @@ public class ChatOrchestrator : IChatOrchestrator
 
             if (chunk.IsComplete)
             {
-                isComplete = true;
                 break;
             }
 
@@ -267,6 +269,8 @@ public class ChatOrchestrator : IChatOrchestrator
             var finalMessages = BuildMessages(systemPrompt, toolPrompt, session.Messages);
             var finalRequest = new LlmRequest(finalMessages, tools, _llmSettings.MaxToolIterations);
 
+            ChatStreamChunk? finalChunk = null;
+
             try
             {
                 var finalResponse = await llmClient.CompleteAsync(finalRequest, ct);
@@ -274,12 +278,17 @@ public class ChatOrchestrator : IChatOrchestrator
                 session = session.AddMessage(finalMessage);
                 await _sessionStore.UpdateAsync(session, ct);
 
-                yield return new ChatStreamChunk(finalMessage.Content, true, toolResults, sessionId);
+                finalChunk = new ChatStreamChunk(finalMessage.Content, true, toolResults, sessionId);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Erro na resposta final do LLM após tools (stream)");
-                yield return new ChatStreamChunk("Erro ao processar resposta final.", true, toolResults, sessionId);
+                finalChunk = new ChatStreamChunk("Erro ao processar resposta final.", true, toolResults, sessionId);
+            }
+
+            if (finalChunk != null)
+            {
+                yield return finalChunk;
             }
         }
         else
@@ -310,7 +319,7 @@ public class ChatOrchestrator : IChatOrchestrator
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            throw new DomainExceptions.TimeoutException(operationName, timeout);
+            throw new TimeoutException(operationName, timeout);
         }
     }
 }
@@ -318,7 +327,7 @@ public class ChatOrchestrator : IChatOrchestrator
 public interface IChatOrchestrator
 {
     Task<ChatResponse> ProcessMessageAsync(string sessionId, string userMessage, CancellationToken ct = default);
-    Task<IAsyncEnumerable<ChatStreamChunk>> ProcessMessageStreamAsync(string sessionId, string userMessage, CancellationToken ct = default);
+    IAsyncEnumerable<ChatStreamChunk> ProcessMessageStreamAsync(string sessionId, string userMessage, CancellationToken ct = default);
 }
 
 public record ChatResponse(

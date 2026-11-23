@@ -76,17 +76,17 @@ public class ViaCepService : ICepService
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
             _logger.LogError("Timeout ao consultar ViaCEP para CEP {Cep}", cep);
-            throw new DomainExceptions.TimeoutException("ViaCEP", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+            throw new TimeoutException("ViaCEP", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
         }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao consultar ViaCEP para CEP {Cep}", cep);
-            throw new DomainExceptions.ExternalApiException("ViaCEP", "Erro de conexão com a API", null, ex);
+            throw new ExternalApiException("ViaCEP", "Erro de conexão com a API", null, ex);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "Erro ao deserializar resposta do ViaCEP para CEP {Cep}", cep);
-            throw new DomainExceptions.ExternalApiException("ViaCEP", "Resposta inválida da API", null, ex);
+            throw new ExternalApiException("ViaCEP", "Resposta inválida da API", null, ex);
         }
     }
 

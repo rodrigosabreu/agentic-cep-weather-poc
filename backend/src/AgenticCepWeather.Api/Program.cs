@@ -51,7 +51,7 @@ builder.Services.AddScoped<OpenAILlmClient>();
 builder.Services.AddCors(options =>
 {
     var corsSettings = builder.Configuration.GetSection("ServerSettings:Cors").Get<CorsSettings>()
-        ?? new CorsSettings { AllowedOrigins = ["*"] };
+        ?? new CorsSettings { AllowedOrigins = ["*"], AllowedMethods = ["GET", "POST", "OPTIONS"], AllowedHeaders = ["Content-Type", "Authorization"], AllowCredentials = false };
 
     options.AddDefaultPolicy(policy =>
     {
@@ -106,13 +106,13 @@ app.MapPost("/api/chat", async (ChatRequest request, IChatOrchestrator orchestra
     {
         return Results.Problem(ex.Message, statusCode: 500, title: ex.ErrorCode);
     }
-    catch (Exception ex)
+    catch (Exception)
     {
         return Results.Problem("Erro interno do servidor", statusCode: 500);
     }
 });
 
-app.MapPost("/api/chat/stream", async (ChatRequest request, IChatOrchestrator orchestrator, CancellationToken ct) =>
+app.MapPost("/api/chat/stream", async (ChatRequest request, IChatOrchestrator orchestrator, CancellationToken ct, HttpResponse response, ILoggerFactory loggerFactory) =>
 {
     if (string.IsNullOrWhiteSpace(request.SessionId))
     {
@@ -124,13 +124,27 @@ app.MapPost("/api/chat/stream", async (ChatRequest request, IChatOrchestrator or
         return Results.BadRequest(new { error = "Mensagem é obrigatória" });
     }
 
-    var responseStream = await orchestrator.ProcessMessageStreamAsync(request.SessionId, request.Message, ct);
-
-    return Results.Ok(new
+    var logger = loggerFactory.CreateLogger("ChatStream");
+    response.ContentType = "text/event-stream";
+    
+    try
     {
-        stream = true,
-        sessionId = request.SessionId
-    });
+        await foreach (var chunk in orchestrator.ProcessMessageStreamAsync(request.SessionId, request.Message, ct))
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(chunk);
+            await response.WriteAsync($"data: {json}\n\n", ct);
+            await response.Body.FlushAsync(ct);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Erro no streaming");
+        var errorChunk = new ChatStreamChunk($"Erro: {ex.Message}", true, [], request.SessionId);
+        var json = System.Text.Json.JsonSerializer.Serialize(errorChunk);
+        await response.WriteAsync($"data: {json}\n\n", ct);
+    }
+
+    return Results.Empty;
 });
 
 app.MapGet("/api/sessions/{sessionId}", async (string sessionId, IChatSessionStore store, CancellationToken ct) =>
