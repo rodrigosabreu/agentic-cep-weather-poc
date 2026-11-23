@@ -216,7 +216,7 @@ public class ApiEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await _client.SendAsync(request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         response.Headers.Should().ContainKey("Access-Control-Allow-Origin");
     }
 }

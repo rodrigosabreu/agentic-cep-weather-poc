@@ -163,8 +163,8 @@ public class InMemoryChatSessionStoreTests
         var session1 = await _store.GetAsync("sessao-1");
         var session2 = await _store.GetAsync("sessao-2");
 
-        session1!.AddMessage(new ChatMessage("user", "Msg sessao 1"));
-        session2!.AddMessage(new ChatMessage("user", "Msg sessao 2"));
+        session1 = session1!.AddMessage(new ChatMessage("user", "Msg sessao 1"));
+        session2 = session2!.AddMessage(new ChatMessage("user", "Msg sessao 2"));
 
         await _store.UpdateAsync(session1);
         await _store.UpdateAsync(session2);
