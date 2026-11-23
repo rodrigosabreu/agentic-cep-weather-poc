@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <SolutionName>AgenticCepWeather</SolutionName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="src/AgenticCepWeather.Domain/AgenticCepWeather.Domain.csproj" />
+    <ProjectReference Include="src/AgenticCepWeather.Application/AgenticCepWeather.Application.csproj" />
+    <ProjectReference Include="src/AgenticCepWeather.Infrastructure/AgenticCepWeather.Infrastructure.csproj" />
+    <ProjectReference Include="src/AgenticCepWeather.Llm/AgenticCepWeather.Llm.csproj" />
+    <ProjectReference Include="src/AgenticCepWeather.Api/AgenticCepWeather.Api.csproj" />
+  </ItemGroup>
+</Project>
