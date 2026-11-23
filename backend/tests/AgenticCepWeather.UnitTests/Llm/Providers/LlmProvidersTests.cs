@@ -1,6 +1,7 @@
 using AgenticCepWeather.Llm.Providers;
 using AgenticCepWeather.Llm.Abstractions;
 using AgenticCepWeather.Application.Services;
+using Microsoft.Extensions.DependencyInjection;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
@@ -511,7 +512,7 @@ public class LlmFallbackTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, cepResult, true));
@@ -551,7 +552,7 @@ public class LlmFallbackTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _primaryClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new LlmProviderException("Nvidia", "API retornou 401: Unauthorized"));
@@ -576,7 +577,7 @@ public class LlmFallbackTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _primaryClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new LlmProviderException("Nvidia", "API retornou 400: Bad Request"));
@@ -601,7 +602,7 @@ public class LlmFallbackTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _primaryClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new HttpRequestException("NVIDIA timeout"));
@@ -648,7 +649,7 @@ public class LlmFallbackTests
         _sessionStoreMock.Setup(s => s.GetAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, cepResult, true));
@@ -657,7 +658,7 @@ public class LlmFallbackTests
             .ThrowsAsync(new HttpRequestException("NVIDIA timeout"));
 
         var openAiCallCount = 0;
-        LlmRequest? capturedRequest = null;
+        _ = (LlmRequest?)null;
         _fallbackClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {

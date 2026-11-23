@@ -1,5 +1,6 @@
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
+using AgenticCepWeather.Llm.Abstractions;
 using AgenticCepWeather.Application.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,7 +47,7 @@ public class ApiEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
                 sessionStoreMock.Setup(s => s.CreateAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                     .ReturnsAsync((string id, CancellationToken _) => AgenticCepWeather.Domain.Models.ChatSession.Create(id));
                 sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<AgenticCepWeather.Domain.Models.ChatSession>(), It.IsAny<CancellationToken>()))
-                    .Returns(Task.CompletedTask);
+                    .Returns(Task.FromResult<AgenticCepWeather.Domain.Models.ChatSession>(null!));
                 sessionStoreMock.Setup(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                     .ReturnsAsync(true);
 

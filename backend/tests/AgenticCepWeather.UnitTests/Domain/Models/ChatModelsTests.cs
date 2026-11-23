@@ -34,8 +34,12 @@ public class ChatModelsTests
 
         // Assert
         message.ToolCalls.Should().HaveCount(1);
+        #pragma warning disable CS8602
         message.ToolCalls[0].Name.Should().Be("consultar_cep");
-        message.ToolCallId.Should().Be("call-1");
+        message.ToolCallId.Should().NotBeNull();
+        var toolCallId = message.ToolCallId;
+        toolCallId.Should().Be("call-1");
+        #pragma warning restore CS8602
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using AgenticCepWeather.Infrastructure.ExternalApis;
+using SystemTimeoutException = System.TimeoutException;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
@@ -144,7 +145,7 @@ public class ViaCepServiceTests
 
         // Act & Assert
         await _service.Invoking(s => s.ConsultarCepAsync(cep))
-            .Should().ThrowAsync<TimeoutException>()
+            .Should().ThrowAsync<SystemTimeoutException>()
             .WithMessage("*Timeout na operação 'ViaCEP'*");
     }
 

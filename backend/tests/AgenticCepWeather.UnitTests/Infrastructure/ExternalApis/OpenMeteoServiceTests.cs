@@ -1,4 +1,5 @@
 using AgenticCepWeather.Infrastructure.ExternalApis;
+using SystemTimeoutException = System.TimeoutException;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
@@ -127,7 +128,7 @@ public class OpenMeteoServiceTests
 
         // Act & Assert
         await _service.Invoking(s => s.GeocodeAsync("São Paulo", "SP"))
-            .Should().ThrowAsync<TimeoutException>()
+            .Should().ThrowAsync<SystemTimeoutException>()
             .WithMessage("*Timeout na operação 'Open-Meteo Geocoding'*");
     }
 
@@ -211,7 +212,7 @@ public class OpenMeteoServiceTests
 
         // Act & Assert
         await _service.Invoking(s => s.GetForecastAsync(-23.55, -46.63))
-            .Should().ThrowAsync<TimeoutException>()
+            .Should().ThrowAsync<SystemTimeoutException>()
             .WithMessage("*Timeout na operação 'Open-Meteo Forecast'*");
     }
 

@@ -1,4 +1,5 @@
 using AgenticCepWeather.Application.Services;
+using SystemTimeoutException = System.TimeoutException;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
@@ -71,7 +72,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         var llmClientMock = new Mock<ILlmClient>();
         llmClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
@@ -108,7 +109,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.GetAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(existingSession);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         var llmClientMock = new Mock<ILlmClient>();
         llmClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
@@ -170,7 +171,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         var cepResult = JsonSerializer.Serialize(new CepResult("01310-100", "Avenida Paulista", "", "Bela Vista", "São Paulo", "SP", "", "", "", ""));
         var weatherResult = JsonSerializer.Serialize(new WeatherResult("São Paulo", "SP", 24.0, 18.0, 28.0, "Céu limpo", 65, 12.0, DateTime.UtcNow));
@@ -235,7 +236,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, cepResult, true));
@@ -286,7 +287,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, "", false, "Timeout ao consultar ViaCEP"));
@@ -305,7 +306,7 @@ public class ChatOrchestratorTests
         var response = await _orchestrator.ProcessMessageAsync(sessionId, userMessage);
 
         // Assert
-        response.Message.Should().Contain("não foi possível").Or.Contain("erro").Or.Contain("tente novamente");
+        response.Message.Should().Match(r => r.Contains("não foi possível") || r.Contains("erro") || r.Contains("tente novamente"));
         response.Message.Should().NotContain("StackTrace");
         response.Message.Should().NotContain("TimeoutException");
     }
@@ -338,7 +339,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, cepResult, true));
@@ -387,7 +388,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         var nvidiaClientMock = new Mock<ILlmClient>();
         nvidiaClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
@@ -405,7 +406,6 @@ public class ChatOrchestratorTests
     {
         // Arrange
         var sessionId = "session-timeout";
-        var userMessage = "Olá";
         var session = ChatSession.Create(sessionId);
 
         _sessionStoreMock.Setup(s => s.GetAsync(sessionId, It.IsAny<CancellationToken>()))
@@ -413,7 +413,7 @@ public class ChatOrchestratorTests
         _sessionStoreMock.Setup(s => s.CreateAsync(sessionId, It.IsAny<CancellationToken>()))
             .ReturnsAsync(session);
         _sessionStoreMock.Setup(s => s.UpdateAsync(It.IsAny<ChatSession>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Returns(Task.FromResult<ChatSession>(null!));
 
         var nvidiaClientMock = new Mock<ILlmClient>();
         nvidiaClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
