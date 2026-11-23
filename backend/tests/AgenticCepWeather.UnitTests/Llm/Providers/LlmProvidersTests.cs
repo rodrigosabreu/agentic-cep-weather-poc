@@ -559,7 +559,7 @@ public class LlmFallbackTests
 
         // Act & Assert
         await _orchestrator.Invoking(o => o.ProcessMessageAsync(sessionId, userMessage))
-            .Should().ThrowAsync<LlmProviderException>();
+            .Should().ThrowAsync<LlmFallbackException>();
 
         _fallbackClientMock.Verify(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -584,7 +584,7 @@ public class LlmFallbackTests
 
         // Act & Assert
         await _orchestrator.Invoking(o => o.ProcessMessageAsync(sessionId, userMessage))
-            .Should().ThrowAsync<LlmProviderException>();
+            .Should().ThrowAsync<LlmFallbackException>();
 
         _fallbackClientMock.Verify(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -611,7 +611,7 @@ public class LlmFallbackTests
 
         // Act & Assert
         await _orchestrator.Invoking(o => o.ProcessMessageAsync(sessionId, userMessage))
-            .Should().ThrowAsync<LlmProviderException>()
+            .Should().ThrowAsync<LlmFallbackException>()
             .Where(e => e.AttemptedExceptions.Count == 2);
     }
 
