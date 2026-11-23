@@ -9,7 +9,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.FileProviders;
 using System.Text.Json;
+using System.IO;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -80,9 +82,28 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// Serve static files (frontend) in production
+if (!app.Environment.IsDevelopment())
+{
+    // In single-file publish, wwwroot is next to the executable
+    var wwwrootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+    if (Directory.Exists(wwwrootPath))
+    {
+        app.UseDefaultFiles(new DefaultFilesOptions
+        {
+            FileProvider = new PhysicalFileProvider(wwwrootPath)
+        });
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(wwwrootPath)
+        });
+    }
+}
+
 app.UseCors();
 app.UseHttpsRedirection();
 
+// API endpoints first
 app.MapGet("/api/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }));
 
 app.MapPost("/api/chat", async (ChatRequest request, IChatOrchestrator orchestrator, CancellationToken ct) =>
@@ -166,6 +187,19 @@ app.MapGet("/api/tools", (IToolExecutor toolExecutor) =>
     var tools = toolExecutor.GetToolDefinitions();
     return Results.Ok(tools);
 });
+
+// SPA fallback - serve index.html for non-API routes
+if (!app.Environment.IsDevelopment())
+{
+    var wwwrootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+    if (Directory.Exists(wwwrootPath))
+    {
+        app.MapFallbackToFile("index.html", new StaticFileOptions
+        {
+            FileProvider = new PhysicalFileProvider(wwwrootPath)
+        });
+    }
+}
 
 app.Run();
 

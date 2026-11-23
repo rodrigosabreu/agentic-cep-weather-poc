@@ -20,6 +20,14 @@ echo ">> Compilando backend..."
 dotnet build AgenticCepWeather.sln -c Release --no-restore
 
 echo ">> Publicando backend (self-contained linux-x64)..."
+# Copy frontend build to wwwroot before publish so static files are embedded
+if [ -d "$FRONTEND_DIR/dist" ]; then
+    echo ">> Copiando frontend para wwwroot..."
+    rm -rf "$BACKEND_DIR/src/AgenticCepWeather.Api/wwwroot"
+    mkdir -p "$BACKEND_DIR/src/AgenticCepWeather.Api/wwwroot"
+    cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/AgenticCepWeather.Api/wwwroot/"
+fi
+
 dotnet publish src/AgenticCepWeather.Api/AgenticCepWeather.Api.csproj \
     -c Release \
     -r linux-x64 \
