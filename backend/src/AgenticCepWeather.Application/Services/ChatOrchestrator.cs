@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using AgenticCepWeather.Domain.Configuration;
 using System.Collections.Concurrent;
+using System.Net;
 using System.Threading.Tasks;
 
 public class ChatOrchestrator : IChatOrchestrator
@@ -48,39 +49,53 @@ public class ChatOrchestrator : IChatOrchestrator
         var toolPrompt = _systemPromptProvider.GetToolSystemPrompt();
         var messages = BuildMessages(systemPrompt, toolPrompt, session.Messages);
 
-        var llmClient = _llmClientFactory.CreateClient(_llmSettings.Provider);
         var tools = _toolExecutor.GetToolDefinitions();
-
-        var request = new LlmRequest(
-            messages,
-            tools,
-            _llmSettings.MaxToolIterations
-        );
+        var request = new LlmRequest(messages, tools, _llmSettings.MaxToolIterations);
 
         LlmResponse response;
         var attemptedExceptions = new List<Exception>();
+        string? activeProvider = null;
+        ILlmClient? activeClient = null;
 
+        // Try primary provider
         try
         {
+            activeProvider = _llmSettings.Provider;
+            activeClient = _llmClientFactory.CreateClient(activeProvider);
             response = await ExecuteWithTimeoutAsync(
-                () => llmClient.CompleteAsync(request, ct),
+                () => activeClient.CompleteAsync(request, ct),
                 TimeSpan.FromSeconds(_llmSettings.RequestTimeoutSeconds),
                 "LLM completion",
                 ct
             );
         }
-        catch (Exception ex) when (ex is not AgenticCepWeatherException)
+        catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Provedor primário {Provider} falhou, tentando fallback", _llmSettings.Provider);
+            if (!IsTransientFailure(ex))
+            {
+                _logger.LogWarning(ex, "Provedor primário {Provider} falhou com erro não transitório, sem fallback", _llmSettings.Provider);
+                throw new LlmFallbackException(new[] { ex });
+            }
+
+            _logger.LogWarning(ex, "Provedor primário {Provider} falhou com erro transitório, tentando fallback", _llmSettings.Provider);
             attemptedExceptions.Add(ex);
 
+            // Try fallback provider
             var fallbackProvider = _llmSettings.Provider == "Nvidia" ? "OpenAI" : "Nvidia";
-            var fallbackClient = _llmClientFactory.CreateClient(fallbackProvider);
+            var fallbackSettings = _llmSettings.GetProviderSettings(fallbackProvider);
+            
+            if (fallbackSettings == null || !fallbackSettings.Enabled)
+            {
+                _logger.LogWarning("Provedor de fallback {Provider} está desabilitado", fallbackProvider);
+                throw new LlmFallbackException(attemptedExceptions);
+            }
 
             try
             {
+                activeProvider = fallbackProvider;
+                activeClient = _llmClientFactory.CreateClient(activeProvider);
                 response = await ExecuteWithTimeoutAsync(
-                    () => fallbackClient.CompleteAsync(request, ct),
+                    () => activeClient.CompleteAsync(request, ct),
                     TimeSpan.FromSeconds(_llmSettings.RequestTimeoutSeconds),
                     "LLM fallback completion",
                     ct
@@ -89,21 +104,54 @@ public class ChatOrchestrator : IChatOrchestrator
             }
             catch (Exception fallbackEx)
             {
+                if (!IsTransientFailure(fallbackEx))
+                {
+                    attemptedExceptions.Add(fallbackEx);
+                    _logger.LogError(fallbackEx, "Fallback para {Provider} também falhou com erro não transitório", fallbackProvider);
+                    throw new LlmFallbackException(attemptedExceptions);
+                }
+                
                 attemptedExceptions.Add(fallbackEx);
                 _logger.LogError(fallbackEx, "Fallback para {Provider} também falhou", fallbackProvider);
                 throw new LlmFallbackException(attemptedExceptions);
             }
         }
 
-        var assistantMessage = response.Message;
-        session = session.AddMessage(assistantMessage);
-        await _sessionStore.UpdateAsync(session, ct);
+        // Process tool calls iteratively up to MaxToolIterations
+        return await ProcessToolCallsIterativelyAsync(
+            activeProvider!, 
+            activeClient!, 
+            session, 
+            systemPrompt, 
+            toolPrompt, 
+            tools, 
+            response, 
+            ct);
+    }
 
-        if (response.ToolCalls.Count > 0)
+    private async Task<ChatResponse> ProcessToolCallsIterativelyAsync(
+        string activeProvider,
+        ILlmClient activeClient,
+        ChatSession session,
+        string systemPrompt,
+        string toolPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        LlmResponse response,
+        CancellationToken ct)
+    {
+        var allToolResults = new List<ToolResult>();
+        var iteration = 0;
+        var maxIterations = _llmSettings.MaxToolIterations;
+        LlmResponse currentResponse = response;
+
+        while (currentResponse.ToolCalls.Count > 0 && iteration < maxIterations)
         {
+            iteration++;
+            _logger.LogInformation("Iniciando iteração {Iteration} de tool calling", iteration);
+
             var toolResults = new List<ToolResult>();
 
-            foreach (var toolCall in response.ToolCalls)
+            foreach (var toolCall in currentResponse.ToolCalls)
             {
                 try
                 {
@@ -128,6 +176,8 @@ public class ChatOrchestrator : IChatOrchestrator
                 }
             }
 
+            allToolResults.AddRange(toolResults);
+
             var toolMessages = toolResults.Select(r => new ChatMessage(
                 "tool",
                 r.Success ? r.Result : $"Erro: {r.Error}",
@@ -142,42 +192,40 @@ public class ChatOrchestrator : IChatOrchestrator
             }
             await _sessionStore.UpdateAsync(session, ct);
 
-            var finalMessages = BuildMessages(systemPrompt, toolPrompt, session.Messages);
-            var finalRequest = new LlmRequest(finalMessages, tools, _llmSettings.MaxToolIterations);
+            var messages = BuildMessages(
+                _systemPromptProvider.GetSystemPrompt(), 
+                _systemPromptProvider.GetToolSystemPrompt(), 
+                session.Messages);
+            var nextRequest = new LlmRequest(messages, tools, _llmSettings.MaxToolIterations);
 
             try
             {
-                var finalResponse = await ExecuteWithTimeoutAsync(
-                    () => llmClient.CompleteAsync(finalRequest, ct),
+                currentResponse = await ExecuteWithTimeoutAsync(
+                    () => _llmClientFactory.CreateClient(activeProvider).CompleteAsync(nextRequest, ct),
                     TimeSpan.FromSeconds(_llmSettings.RequestTimeoutSeconds),
-                    "LLM final completion",
+                    $"LLM iteration {iteration + 1}",
                     ct
-                );
-
-                var finalMessage = finalResponse.Message;
-                session = session.AddMessage(finalMessage);
-                await _sessionStore.UpdateAsync(session, ct);
-
-                return new ChatResponse(
-                    finalMessage.Content,
-                    toolResults,
-                    session.Id
                 );
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Erro na resposta final do LLM após tools");
+                _logger.LogError(ex, "Erro na resposta do LLM na iteração {Iteration}", iteration + 1);
                 return new ChatResponse(
-                    "Ocorreu um erro ao processar a resposta final. Tente novamente.",
-                    toolResults,
+                    "Ocorreu um erro ao processar a resposta. Tente novamente.",
+                    allToolResults,
                     session.Id
                 );
             }
         }
 
+        // Final response after all tool iterations (or if no tool calls from start)
+        var finalMessage = currentResponse.Message;
+        session = session.AddMessage(finalMessage);
+        await _sessionStore.UpdateAsync(session, ct);
+
         return new ChatResponse(
-            assistantMessage.Content,
-            [],
+            finalMessage.Content,
+            allToolResults,
             session.Id
         );
     }
@@ -321,6 +369,22 @@ public class ChatOrchestrator : IChatOrchestrator
         {
             throw new TimeoutException(operationName, timeout);
         }
+    }
+
+    private static bool IsTransientFailure(Exception ex)
+    {
+        if (ex is TimeoutException) return true;
+        if (ex is HttpRequestException) return true;
+        if (ex is TaskCanceledException) return true;
+        if (ex is LlmProviderException providerEx)
+        {
+            var message = providerEx.Message;
+            if (message.Contains("500") || message.Contains("502") || message.Contains("503") || message.Contains("504") || message.Contains("429"))
+                return true;
+            if (message.Contains("401") || message.Contains("400") || message.Contains("403") || message.Contains("404"))
+                return false;
+        }
+        return true;
     }
 }
 

@@ -7,6 +7,7 @@ using AgenticCepWeather.Domain.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 public class OpenMeteoService : IWeatherService
 {
@@ -62,6 +63,11 @@ public class OpenMeteoService : IWeatherService
             _logger.LogError("Timeout ao geocodificar {Cidade}/{Uf}", cidade, uf);
             throw new TimeoutException("Open-Meteo Geocoding", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogError("Timeout ao geocodificar {Cidade}/{Uf}", cidade, uf);
+            throw new TimeoutException("Open-Meteo Geocoding", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao geocodificar {Cidade}/{Uf}", cidade, uf);
@@ -113,15 +119,20 @@ public class OpenMeteoService : IWeatherService
             var current = forecastResponse.Current;
             var daily = forecastResponse.Daily;
 
+            // Use weather_code from current (which has the current weather)
             var weatherCode = current.WeatherCode;
             var description = GetWeatherDescription(weatherCode);
 
+            // Ensure daily arrays have values
+            var tempMax = daily.Temperature2mMax?.FirstOrDefault() ?? 0.0;
+            var tempMin = daily.Temperature2mMin?.FirstOrDefault() ?? 0.0;
+
             return new WeatherResult(
-                "Localidade", // Será preenchido pelo chamador se necessário
+                "Localidade",
                 "UF",
                 current.Temperature2m,
-                daily.Temperature2mMin.FirstOrDefault(),
-                daily.Temperature2mMax.FirstOrDefault(),
+                tempMin,
+                tempMax,
                 description,
                 current.RelativeHumidity2m,
                 current.WindSpeed10m,
@@ -129,6 +140,11 @@ public class OpenMeteoService : IWeatherService
             );
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            _logger.LogError("Timeout ao obter previsão do tempo para lat={Lat}, lon={Lon}", latitude, longitude);
+            throw new TimeoutException("Open-Meteo Forecast", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             _logger.LogError("Timeout ao obter previsão do tempo para lat={Lat}, lon={Lon}", latitude, longitude);
             throw new TimeoutException("Open-Meteo Forecast", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
@@ -179,9 +195,66 @@ public class OpenMeteoService : IWeatherService
     };
 }
 
-internal record GeoResponse(IReadOnlyList<GeoResult>? Results);
-internal record GeoResult(double Latitude, double Longitude, string Name, string CountryCode, string? Admin1);
+// Use classes with JsonPropertyName for reliable deserialization
+internal class GeoResponse
+{
+    [JsonPropertyName("results")]
+    public List<GeoResult>? Results { get; set; }
+}
 
-internal record ForecastResponse(CurrentWeather Current, DailyWeather Daily);
-internal record CurrentWeather(double Temperature2m, int RelativeHumidity2m, int WeatherCode, double WindSpeed10m, string Time);
-internal record DailyWeather(IReadOnlyList<double> Temperature2mMax, IReadOnlyList<double> Temperature2mMin, IReadOnlyList<int> WeatherCode);
+internal class GeoResult
+{
+    [JsonPropertyName("latitude")]
+    public double Latitude { get; set; }
+    
+    [JsonPropertyName("longitude")]
+    public double Longitude { get; set; }
+    
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+    
+    [JsonPropertyName("country_code")]
+    public string CountryCode { get; set; } = string.Empty;
+    
+    [JsonPropertyName("admin1")]
+    public string? Admin1 { get; set; }
+}
+
+internal class ForecastResponse
+{
+    [JsonPropertyName("current")]
+    public CurrentWeather? Current { get; set; }
+    
+    [JsonPropertyName("daily")]
+    public DailyWeather? Daily { get; set; }
+}
+
+internal class CurrentWeather
+{
+    [JsonPropertyName("temperature_2m")]
+    public double Temperature2m { get; set; }
+    
+    [JsonPropertyName("relative_humidity_2m")]
+    public int RelativeHumidity2m { get; set; }
+    
+    [JsonPropertyName("weather_code")]
+    public int WeatherCode { get; set; }
+    
+    [JsonPropertyName("wind_speed_10m")]
+    public double WindSpeed10m { get; set; }
+    
+    [JsonPropertyName("time")]
+    public string Time { get; set; } = string.Empty;
+}
+
+internal class DailyWeather
+{
+    [JsonPropertyName("temperature_2m_max")]
+    public List<double>? Temperature2mMax { get; set; }
+    
+    [JsonPropertyName("temperature_2m_min")]
+    public List<double>? Temperature2mMin { get; set; }
+    
+    [JsonPropertyName("weather_code")]
+    public List<int>? WeatherCode { get; set; }
+}

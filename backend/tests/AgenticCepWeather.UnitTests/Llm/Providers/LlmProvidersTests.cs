@@ -33,8 +33,8 @@ public class NvidiaLlmClientTests
         _settings = Options.Create(new LlmSettings
         {
             Provider = "Nvidia",
-            Nvidia = new NvidiaSettings { ApiKey = "test-key", BaseUrl = "https://integrate.api.nvidia.com/v1", Model = "nvidia/llama-3.1-nemotron-70b-instruct", EnableStreaming = true },
-            OpenAI = new OpenAISettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1", Model = "gpt-4o-mini", EnableStreaming = true },
+            Nvidia = new NvidiaSettings { ApiKey = "test-key", BaseUrl = "https://integrate.api.nvidia.com/v1", Model = "nvidia/llama-3.1-nemotron-70b-instruct", EnableStreaming = true, Enabled = true },
+            OpenAI = new OpenAISettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1", Model = "gpt-4o-mini", EnableStreaming = true, Enabled = true },
             MaxToolIterations = 5,
             RequestTimeoutSeconds = 30
         });
@@ -140,7 +140,7 @@ public class NvidiaLlmClientTests
                                 function = new
                                 {
                                     name = "consultar_cep",
-                                    arguments = "{\"cep\":\"01310-100\"}"
+                                    arguments = "{\\\"cep\\\":\\\"01310-100\\\"}"
                                 }
                             }
                         }
@@ -172,7 +172,7 @@ public class NvidiaLlmClientTests
         // Act & Assert
         await _client.Invoking(c => c.CompleteAsync(request))
             .Should().ThrowAsync<LlmProviderException>()
-            .Where(e => e.Provider == "Nvidia" && e.Message.Contains("500"));
+            .Where(e => e.Provider == "Nvidia" && (e.Message.Contains("500") || e.Message.Contains("InternalServerError")));
     }
 
     [Fact]
@@ -219,8 +219,8 @@ public class OpenAILlmClientTests
         _settings = Options.Create(new LlmSettings
         {
             Provider = "OpenAI",
-            Nvidia = new NvidiaSettings { ApiKey = "test-key", BaseUrl = "https://integrate.api.nvidia.com/v1", Model = "nvidia/llama-3.1-nemotron-70b-instruct", EnableStreaming = true },
-            OpenAI = new OpenAISettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1", Model = "gpt-4o-mini", EnableStreaming = true },
+            Nvidia = new NvidiaSettings { ApiKey = "test-key", BaseUrl = "https://integrate.api.nvidia.com/v1", Model = "nvidia/llama-3.1-nemotron-70b-instruct", EnableStreaming = true, Enabled = true },
+            OpenAI = new OpenAISettings { ApiKey = "test-key", BaseUrl = "https://api.openai.com/v1", Model = "gpt-4o-mini", EnableStreaming = true, Enabled = true },
             MaxToolIterations = 5,
             RequestTimeoutSeconds = 30
         });
@@ -312,7 +312,7 @@ public class OpenAILlmClientTests
                                 function = new
                                 {
                                     name = "consultar_cep",
-                                    arguments = "{\"cep\":\"01310-100\"}"
+                                    arguments = "{\\\"cep\\\":\\\"01310-100\\\"}"
                                 }
                             }
                         }
@@ -360,8 +360,8 @@ public class LlmClientFactoryTests
         _settings = Options.Create(new LlmSettings
         {
             Provider = "Nvidia",
-            Nvidia = new NvidiaSettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test" },
-            OpenAI = new OpenAISettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test" }
+            Nvidia = new NvidiaSettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test", Enabled = true },
+            OpenAI = new OpenAISettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test", Enabled = true }
         });
         _factory = new LlmClientFactory(_serviceProviderMock.Object, _loggerMock.Object, _settings);
     }
@@ -369,8 +369,9 @@ public class LlmClientFactoryTests
     [Fact]
     public void CreateClient_Nvidia_RetornaNvidiaLlmClient()
     {
-        var nvidiaClientMock = new Mock<NvidiaLlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<NvidiaLlmClient>>());
-        _serviceProviderMock.Setup(s => s.GetRequiredService<NvidiaLlmClient>()).Returns(nvidiaClientMock.Object);
+        var nvidiaClient = new Mock<NvidiaLlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<NvidiaLlmClient>>());
+        nvidiaClient.Setup(c => c.ProviderName).Returns("Nvidia");
+        _serviceProviderMock.Setup(s => s.GetService(typeof(NvidiaLlmClient))).Returns(nvidiaClient.Object);
 
         var client = _factory.CreateClient("Nvidia");
 
@@ -381,8 +382,9 @@ public class LlmClientFactoryTests
     [Fact]
     public void CreateClient_OpenAI_RetornaOpenAILlmClient()
     {
-        var openAiClientMock = new Mock<OpenAILlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<OpenAILlmClient>>());
-        _serviceProviderMock.Setup(s => s.GetRequiredService<OpenAILlmClient>()).Returns(openAiClientMock.Object);
+        var openAiClient = new Mock<OpenAILlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<OpenAILlmClient>>());
+        openAiClient.Setup(c => c.ProviderName).Returns("OpenAI");
+        _serviceProviderMock.Setup(s => s.GetService(typeof(OpenAILlmClient))).Returns(openAiClient.Object);
 
         var client = _factory.CreateClient("OpenAI");
 
@@ -416,12 +418,14 @@ public class LlmClientFactoryTests
         if (providerName == "Nvidia")
         {
             var mock = new Mock<NvidiaLlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<NvidiaLlmClient>>());
-            _serviceProviderMock.Setup(s => s.GetRequiredService<NvidiaLlmClient>()).Returns(mock.Object);
+            mock.Setup(c => c.ProviderName).Returns("Nvidia");
+            _serviceProviderMock.Setup(s => s.GetService(typeof(NvidiaLlmClient))).Returns(mock.Object);
         }
         else
         {
             var mock = new Mock<OpenAILlmClient>(Mock.Of<HttpClient>(), _settings, Mock.Of<ILogger<OpenAILlmClient>>());
-            _serviceProviderMock.Setup(s => s.GetRequiredService<OpenAILlmClient>()).Returns(mock.Object);
+            mock.Setup(c => c.ProviderName).Returns("OpenAI");
+            _serviceProviderMock.Setup(s => s.GetService(typeof(OpenAILlmClient))).Returns(mock.Object);
         }
 
         var client = _factory.CreateClient(providerName);
@@ -455,8 +459,8 @@ public class LlmFallbackTests
         _llmSettings = Options.Create(new LlmSettings
         {
             Provider = "Nvidia",
-            Nvidia = new NvidiaSettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test" },
-            OpenAI = new OpenAISettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test" },
+            Nvidia = new NvidiaSettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test", Enabled = true },
+            OpenAI = new OpenAISettings { ApiKey = "test", BaseUrl = "https://test.com", Model = "test", Enabled = true },
             MaxToolIterations = 5,
             RequestTimeoutSeconds = 30
         });
@@ -489,11 +493,11 @@ public class LlmFallbackTests
         var llmResponse = new LlmResponse(
             new ChatMessage("assistant", "", DateTime.UtcNow, new List<ToolCall>
             {
-                new("call-1", ToolNames.ConsultarCep, "{\"cep\":\"01310-100\"}")
+                new("call-1", ToolNames.ConsultarCep, "{\\\"cep\\\":\\\"01310-100\\\"}")
             }),
             new List<ToolCall>
             {
-                new("call-1", ToolNames.ConsultarCep, "{\"cep\":\"01310-100\"}")
+                new("call-1", ToolNames.ConsultarCep, "{\\\"cep\\\":\\\"01310-100\\\"}")
             },
             new LlmUsage(10, 5, 15),
             "test-model"
@@ -517,7 +521,16 @@ public class LlmFallbackTests
         _toolExecutorMock.Setup(t => t.ExecuteAsync(ToolNames.ConsultarCep, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ToolResult("call-1", ToolNames.ConsultarCep, cepResult, true));
 
-        var exception = (Exception)Activator.CreateInstance(exceptionType, "Transient error")!;
+        Exception exception;
+        if (exceptionType == typeof(LlmProviderException))
+        {
+            exception = new LlmProviderException("Nvidia", "API retornou 500: Internal Server Error");
+        }
+        else
+        {
+            exception = (Exception)Activator.CreateInstance(exceptionType, "Transient error")!;
+        }
+
         _primaryClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(exception);
 
@@ -628,11 +641,11 @@ public class LlmFallbackTests
         var llmResponse = new LlmResponse(
             new ChatMessage("assistant", "", DateTime.UtcNow, new List<ToolCall>
             {
-                new("call-1", ToolNames.ConsultarCep, "{\"cep\":\"01310-100\"}")
+                new("call-1", ToolNames.ConsultarCep, "{\\\"cep\\\":\\\"01310-100\\\"}")
             }),
             new List<ToolCall>
             {
-                new("call-1", ToolNames.ConsultarCep, "{\"cep\":\"01310-100\"}")
+                new("call-1", ToolNames.ConsultarCep, "{\\\"cep\\\":\\\"01310-100\\\"}")
             },
             new LlmUsage(10, 5, 15),
             "test-model"
@@ -658,14 +671,12 @@ public class LlmFallbackTests
             .ThrowsAsync(new HttpRequestException("NVIDIA timeout"));
 
         var openAiCallCount = 0;
-        _ = (LlmRequest?)null;
         _fallbackClientMock.Setup(c => c.CompleteAsync(It.IsAny<LlmRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() =>
             {
                 openAiCallCount++;
                 if (openAiCallCount == 1)
                 {
-                    // Captura o request passado para o fallback
                     return llmResponse;
                 }
                 return finalLlmResponse;

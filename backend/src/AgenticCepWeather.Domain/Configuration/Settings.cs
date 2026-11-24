@@ -9,22 +9,43 @@ public record LlmSettings
     public int RequestTimeoutSeconds { get; init; } = 30;
     public int InitTimeoutSeconds { get; init; } = 30;
     public int StopTimeoutSeconds { get; init; } = 15;
+
+    public ProviderSettings? GetProviderSettings(string provider)
+    {
+        return provider switch
+        {
+            "Nvidia" => Nvidia,
+            "OpenAI" => OpenAI,
+            _ => null
+        };
+    }
 }
 
-public record NvidiaSettings
+public abstract record ProviderSettings
 {
     public required string ApiKey { get; init; }
-    public required string BaseUrl { get; init; } = "https://integrate.api.nvidia.com/v1";
-    public required string Model { get; init; } = "nvidia/llama-3.1-nemotron-70b-instruct";
+    public required string BaseUrl { get; init; }
+    public required string Model { get; init; }
     public bool EnableStreaming { get; init; } = true;
+    public bool Enabled { get; init; } = true;
 }
 
-public record OpenAISettings
+public record NvidiaSettings : ProviderSettings
 {
-    public required string ApiKey { get; init; }
-    public required string BaseUrl { get; init; } = "https://api.openai.com/v1";
-    public required string Model { get; init; } = "gpt-4o-mini";
-    public bool EnableStreaming { get; init; } = true;
+    public NvidiaSettings()
+    {
+        BaseUrl = "https://integrate.api.nvidia.com/v1";
+        Model = "nvidia/llama-3.1-nemotron-70b-instruct";
+    }
+}
+
+public record OpenAISettings : ProviderSettings
+{
+    public OpenAISettings()
+    {
+        BaseUrl = "https://api.openai.com/v1";
+        Model = "gpt-4o-mini";
+    }
 }
 
 public record ExternalApiSettings

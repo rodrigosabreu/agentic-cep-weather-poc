@@ -42,10 +42,14 @@ public class ToolExecutorTests
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
         result.Name.Should().Be(ToolNames.ConsultarCep);
-        result.Result.Should().Contain("Avenida Paulista");
-        result.Result.Should().Contain("Bela Vista");
-        result.Result.Should().Contain("São Paulo");
-        result.Result.Should().Contain("SP");
+        
+        var cepResult = JsonSerializer.Deserialize<CepResult>(result.Result, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        cepResult.Should().NotBeNull();
+        cepResult!.Logradouro.Should().Be("Avenida Paulista");
+        cepResult.Bairro.Should().Be("Bela Vista");
+        cepResult.Localidade.Should().Be("São Paulo");
+        cepResult.Uf.Should().Be("SP");
+        
         _cepServiceMock.Verify(s => s.ConsultarCepAsync(cep, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -54,6 +58,9 @@ public class ToolExecutorTests
     {
         // Arrange
         var arguments = JsonSerializer.Serialize(new CepInput("abc"));
+        // Service returns null for invalid CEP format
+        _cepServiceMock.Setup(s => s.ConsultarCepAsync("abc", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CepResult?)null);
 
         // Act
         var result = await _executor.ExecuteAsync(ToolNames.ConsultarCep, arguments);
@@ -62,7 +69,7 @@ public class ToolExecutorTests
         result.Should().NotBeNull();
         result.Success.Should().BeFalse();
         result.Error.Should().Contain("CEP");
-        _cepServiceMock.Verify(s => s.ConsultarCepAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _cepServiceMock.Verify(s => s.ConsultarCepAsync("abc", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -70,6 +77,8 @@ public class ToolExecutorTests
     {
         // Arrange
         var arguments = JsonSerializer.Serialize(new CepInput(""));
+        _cepServiceMock.Setup(s => s.ConsultarCepAsync("", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((CepResult?)null);
 
         // Act
         var result = await _executor.ExecuteAsync(ToolNames.ConsultarCep, arguments);
@@ -118,9 +127,13 @@ public class ToolExecutorTests
         result.Should().NotBeNull();
         result.Success.Should().BeTrue();
         result.Name.Should().Be(ToolNames.ConsultarPrevisaoTempo);
-        result.Result.Should().Contain("São Paulo");
-        result.Result.Should().Contain("24.5");
-        result.Result.Should().Contain("Céu limpo");
+        
+        var weatherResult = JsonSerializer.Deserialize<WeatherResult>(result.Result, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        weatherResult.Should().NotBeNull();
+        weatherResult!.Cidade.Should().Be("São Paulo");
+        weatherResult.TemperaturaAtual.Should().Be(24.5);
+        weatherResult.Descricao.Should().Be("Céu limpo");
+        
         _weatherServiceMock.Verify(s => s.GeocodeAsync(cidade, uf, It.IsAny<CancellationToken>()), Times.Once);
         _weatherServiceMock.Verify(s => s.GetForecastAsync(coords.Latitude, coords.Longitude, It.IsAny<CancellationToken>()), Times.Once);
     }

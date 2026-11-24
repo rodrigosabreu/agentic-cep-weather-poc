@@ -1,5 +1,5 @@
 using AgenticCepWeather.Infrastructure.ExternalApis;
-using SystemTimeoutException = System.TimeoutException;
+using CustomTimeoutException = AgenticCepWeather.Domain.Exceptions.TimeoutException;
 using AgenticCepWeather.Domain.Interfaces;
 using AgenticCepWeather.Domain.Models;
 using AgenticCepWeather.Domain.Exceptions;
@@ -128,7 +128,7 @@ public class OpenMeteoServiceTests
 
         // Act & Assert
         await _service.Invoking(s => s.GeocodeAsync("São Paulo", "SP"))
-            .Should().ThrowAsync<SystemTimeoutException>()
+            .Should().ThrowAsync<CustomTimeoutException>()
             .WithMessage("*Timeout na operação 'Open-Meteo Geocoding'*");
     }
 
@@ -212,7 +212,7 @@ public class OpenMeteoServiceTests
 
         // Act & Assert
         await _service.Invoking(s => s.GetForecastAsync(-23.55, -46.63))
-            .Should().ThrowAsync<SystemTimeoutException>()
+            .Should().ThrowAsync<CustomTimeoutException>()
             .WithMessage("*Timeout na operação 'Open-Meteo Forecast'*");
     }
 
@@ -263,7 +263,7 @@ public class OpenMeteoServiceTests
     [InlineData(999, "Desconhecido")]
     public async Task GetForecastAsync_MapeamentoWeatherCode_RetornaDescricaoCorreta(int weatherCode, string expectedDescription)
     {
-        // Arrange
+        // Arrange - Use weather_code in CURRENT (which is what the service reads)
         var responseJson = JsonSerializer.Serialize(new
         {
             current = new

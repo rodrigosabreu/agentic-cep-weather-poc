@@ -78,6 +78,12 @@ public class ViaCepService : ICepService
             _logger.LogError("Timeout ao consultar ViaCEP para CEP {Cep}", cep);
             throw new TimeoutException("ViaCEP", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // Timeout from our linked token source (cancelled by CancelAfter)
+            _logger.LogError("Timeout ao consultar ViaCEP para CEP {Cep}", cep);
+            throw new TimeoutException("ViaCEP", TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        }
         catch (HttpRequestException ex)
         {
             _logger.LogError(ex, "Erro de rede ao consultar ViaCEP para CEP {Cep}", cep);
